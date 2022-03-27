@@ -43,6 +43,21 @@ def log_to_tb_val(tb_logger, time_used, init_value, best_value, reward, improvem
     tb_logger.log_value(f'validation/avg_init_cost', init_value.mean(), epoch)
     tb_logger.log_value(f'validation/avg_best_cost', best_value.mean(), epoch)
 
+
+def log_to_tb_val_swa(tb_logger, time_used, init_value, best_value, reward, improvement,
+                  batch_size, dataset_size, T, epoch):
+    tb_logger.log_images('validation/improve_pg', [plot_improve_pg(init_value, reward)], epoch)
+
+    tb_logger.log_value('validation_swa/avg_time', time_used.mean() / dataset_size, epoch)
+    tb_logger.log_value('validation_swa/avg_total_reward', reward.sum(1).mean(), epoch)
+    tb_logger.log_value('validation_swa/avg_step_reward', reward.mean(), epoch)
+    for per in range(20, 101, 20):
+        improved = improvement[:, :round(T * per / 100)].sum(1).view(-1, 1)
+        cost_ = init_value - improved
+        tb_logger.log_value(f'validation_swa/avg_.{per}_cost', cost_.mean(), epoch)
+    tb_logger.log_value(f'validation_swa/avg_init_cost', init_value.mean(), epoch)
+    tb_logger.log_value(f'validation_swa/avg_best_cost', best_value.mean(), epoch)
+
 def log_to_tb_train(tb_logger, optimizer, model, baseline, total_cost, grad_norms, reward, 
                exchange_history, reinforce_loss, baseline_loss, log_likelihood, initial_cost, mini_step):
     

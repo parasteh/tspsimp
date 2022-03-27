@@ -36,7 +36,7 @@ def get_options(args=None):
     ### training AND validation
     parser.add_argument('--n_step', type=int, default=4)
     parser.add_argument('--T_train', type=int, default=200)
-    parser.add_argument('--batch_size', type=int, default=2000,
+    parser.add_argument('--batch_size', type=int, default=2500,
                         help='Number of instances per batch during training')
     parser.add_argument('--n_epochs', type=int, default=100,
                         help='The number of epochs to train')

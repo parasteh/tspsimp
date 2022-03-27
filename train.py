@@ -4,7 +4,9 @@ import torch
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from utils import move_to, clip_grad_norms, get_inner_model
-from utils.logger import log_to_screen, log_to_tb_train, log_to_tb_val
+from utils.logger import log_to_screen, log_to_tb_train, log_to_tb_val, log_to_tb_val_swa
+from torch.optim.swa_utils import AveragedModel, SWALR
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
 def rollout(problem, model, x_input, batch, solution, value, opts, T, do_sample = False, record = False):
     
@@ -49,7 +51,7 @@ def rollout(problem, model, x_input, batch, solution, value, opts, T, do_sample 
         
     return best_val.view(-1,1), torch.stack(improvement,1), torch.stack(reward,1), None if not record else torch.stack(solution_history,1)
 
-def validate(problem, model, val_dataset, tb_logger, opts, _id = None):
+def validate(problem, model, val_dataset, tb_logger, opts, _id = None, is_swa=False):
     # Validate mode
     print('\nValidating...', flush=True)
     model.eval()
@@ -59,10 +61,12 @@ def validate(problem, model, val_dataset, tb_logger, opts, _id = None):
     improvement = []
     reward = []
     time_used = []
-    
+    swa_str  = ''
+    if is_swa:
+        swa_str = '_swa'
     for batch in tqdm(DataLoader(val_dataset, batch_size = opts.eval_batch_size), 
                         disable = opts.no_progress_bar or opts.val_size == opts.eval_batch_size, 
-                        desc = 'validate', bar_format='{l_bar}{bar:20}{r_bar}{bar:-20b}'):
+                        desc = 'validate'+swa_str, bar_format='{l_bar}{bar:20}{r_bar}{bar:-20b}'):
         
         #initial solutions
         initial_solution = move_to(
@@ -117,7 +121,8 @@ def validate(problem, model, val_dataset, tb_logger, opts, _id = None):
     
     # log to tb
     if(not opts.no_tb):
-        log_to_tb_val(tb_logger,
+        if not is_swa:
+            log_to_tb_val(tb_logger,
                       time_used, 
                       init_value, 
                       best_value, 
@@ -127,8 +132,22 @@ def validate(problem, model, val_dataset, tb_logger, opts, _id = None):
                       dataset_size = len(val_dataset), 
                       T = opts.T_max,
                       epoch = _id)
+        else:
+            log_to_tb_val_swa(tb_logger,
+                      time_used,
+                      init_value,
+                      best_value,
+                      reward,
+                      improvement,
+                      batch_size=opts.eval_batch_size,
+                      dataset_size=len(val_dataset),
+                      T=opts.T_max,
+                      epoch=_id)
     
     # save to file
+    swa_str = ''
+    if is_swa:
+        swa_str = "_swa"
     if _id is not None:
         torch.save(
         {
@@ -138,12 +157,13 @@ def validate(problem, model, val_dataset, tb_logger, opts, _id = None):
             'reward': reward,
             'time_used': time_used,
         },
-        os.path.join(opts.save_dir, 'validate-{}.pt'.format(_id)))
+        os.path.join(opts.save_dir, 'validate{}-{}.pt'.format(swa_str,_id)))
         
     
 
-def train_epoch(problem, model, optimizer, baseline, lr_scheduler, epoch, val_dataset, tb_logger, opts):
-    
+def train_epoch(problem, model, training_dataloader, optimizer, baseline, lr_scheduler, epoch, val_dataset, tb_logger, opts):
+
+
     # lr_scheduler
     lr_scheduler.step(epoch)
     
@@ -152,9 +172,7 @@ def train_epoch(problem, model, optimizer, baseline, lr_scheduler, epoch, val_da
     print("Training with lr={:.3e} for run {}".format(optimizer.param_groups[0]['lr'], opts.run_name), flush=True)
     step = epoch * (opts.epoch_size // opts.batch_size)    
 
-    # Generate new training data for each epoch
-    training_dataset = problem.make_dataset(size=opts.graph_size, num_samples=opts.epoch_size)
-    training_dataloader = DataLoader(training_dataset, batch_size=opts.batch_size)
+
 
     # Put model in train mode!
     model.train()
