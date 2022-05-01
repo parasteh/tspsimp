@@ -12,6 +12,7 @@ class CriticNetwork(nn.Module):
              n_layers,
              normalization,
              device,
+             dropout,
              best_incumbent = False
              ):
         
@@ -42,7 +43,8 @@ class CriticNetwork(nn.Module):
         self.encoder = nn.Sequential(*(
             MultiHeadAttentionLayer(self.n_heads, 
                                     self.embedding_dim, 
-                                    self.hidden_dim, 
+                                    self.hidden_dim,
+                                    dropout,
                                     self.normalization)
             for _ in range(self.n_layers)))
         
@@ -52,10 +54,10 @@ class CriticNetwork(nn.Module):
         
         self.value_head = nn.Sequential(
                 nn.Linear(embedding_dim, self.hidden_dim),
-                nn.Dropout(0.001),
+                nn.Dropout(dropout),
                 nn.ReLU(),
                 nn.Linear(self.hidden_dim, 1),
-                nn.Dropout(0.001)
+                nn.Dropout(dropout)
             )   
             
 

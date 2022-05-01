@@ -20,6 +20,8 @@ from utils import torch_load_cpu, load_problem, get_inner_model
 
 def run(opts):
 
+
+    torch.cuda.empty_cache()
     # Pretty print the run args
     pprint.pprint(vars(opts))
 
@@ -40,7 +42,7 @@ def run(opts):
 
      # Set the device
     opts.device = torch.device("cuda" if opts.use_cuda else "cpu")
-    
+
     # Figure out what's the problem
     problem = load_problem(opts.problem)(
                             p_size = opts.graph_size, 
@@ -66,13 +68,14 @@ def run(opts):
             n_heads = opts.n_heads_encoder,
             n_layers = opts.n_encode_layers,
             normalization = opts.normalization,
-            device = opts.device
+            device = opts.device,
+        dropout=opts.dropout
         ).to(opts.device)
 
     if opts.use_cuda and torch.cuda.device_count() > 1:
         model = torch.nn.DataParallel(model)
     
-
+    # model2 = AveragedModel(model)
     # Overwrite model parameters by parameters to load
     model_ = get_inner_model(model)
     model_.load_state_dict({**model_.state_dict(), **load_data.get('model', {})})
@@ -83,6 +86,7 @@ def run(opts):
                                        filename = opts.val_dataset)
     
     # Do validation only
+
     if opts.eval_only:
         validate(problem, model, val_dataset, tb_logger, opts, _id = 0)
         
@@ -97,7 +101,8 @@ def run(opts):
                     n_heads = opts.n_heads_decoder,
                     n_layers = opts.n_encode_layers,
                     normalization = opts.normalization,
-                    device = opts.device
+                    device = opts.device,
+                    dropout=opts.dropout
                 ).to(opts.device)
         )
     
@@ -136,17 +141,19 @@ def run(opts):
             # Dumping of state was done before epoch callback, so do that now (model is loaded)
             print("Resuming after {}".format(epoch_resume))
             opts.epoch_start = epoch_resume + 1
-    
+
         # Start the actual training loop
-        swa_start = 60
+        swa_start = 160
         # Add the SWA strategy
         swa_model = AveragedModel(model)
-        swa_scheduler = SWALR(optimizer,swa_lr=0.05)
+
+        # swa_scheduler = SWALR(optimizer,swa_lr=0.05)
 
         for epoch in range(opts.epoch_start, opts.epoch_start + opts.n_epochs):
             # Generate new training data for each epoch
             training_dataset = problem.make_dataset(size=opts.graph_size, num_samples=opts.epoch_size)
             training_dataloader = DataLoader(training_dataset, batch_size=opts.batch_size)
+
             train_epoch(
                 problem,
                 model,
@@ -159,18 +166,30 @@ def run(opts):
                 tb_logger,
                 opts
             )
-            if epoch > swa_start:
-                swa_model.update_parameters(model)
-                swa_scheduler.step()
-                if epoch % 5 == 0:
-                    #now we need to continue one more step to run batch normalization
-                    update_bn(training_dataloader, swa_model,problem,opts)
-                    # validate the model
-                    validate(problem, swa_model,val_dataset,tb_logger,opts,_id=epoch,is_swa= True)
+            # if epoch > swa_start:
+            #     # swa_model.update_parameters(model)
+            #     # swa_scheduler.step()
+            #     if (opts.checkpoint_epochs != 0 and epoch % opts.checkpoint_epochs == 0) or epoch == opts.n_epochs - 1:
+            #         print('Saving model and state...')
+            #         torch.save(
+            #             {
+            #                 'model': get_inner_model(swa_model).state_dict(),
+            #                 'optimizer': optimizer.state_dict(),
+            #                 'rng_state': torch.get_rng_state(),
+            #                 'cuda_rng_state': torch.cuda.get_rng_state_all(),
+            #                 'baseline': baseline.state_dict()
+            #             },
+            #             os.path.join(opts.save_dir, 'epoch-swa-{}.pt'.format(epoch))
+            #         )
+            #     if epoch % 10 == 0:
+            #         #now we need to continue one more step to run batch normalization
+            #         update_bn(training_dataloader, swa_model,problem,opts)
+            #         # validate the model
+            #         validate(problem, swa_model,val_dataset,tb_logger,opts,_id=epoch,is_swa= True)
 
-        update_bn(training_dataloader, swa_model,problem,opts)
-        # validate the model
-        validate(problem, swa_model, val_dataset, tb_logger, opts, _id=epoch, is_swa=True)
+        # update_bn(training_dataloader, swa_model,problem,opts)
+        # # validate the model
+        # validate(problem, swa_model, val_dataset, tb_logger, opts, _id=epoch, is_swa=True)
 
 
 @torch.no_grad()

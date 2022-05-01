@@ -22,7 +22,7 @@ def rollout(problem, model, x_input, batch, solution, value, opts, T, do_sample 
     
     for t in tqdm(range(T), disable = opts.no_progress_bar, desc = 'rollout', bar_format='{l_bar}{bar:20}{r_bar}{bar:-20b}'):
         
-        exchange, _ = model( x_input, 
+        exchange, _,_ = model( x_input,
                              solutions, 
                              exchange, 
                              do_sample = do_sample)
@@ -53,7 +53,7 @@ def rollout(problem, model, x_input, batch, solution, value, opts, T, do_sample 
 
 def validate(problem, model, val_dataset, tb_logger, opts, _id = None, is_swa=False):
     # Validate mode
-    print('\nValidating...', flush=True)
+    print('\nValidating..ccc.', flush=True)
     model.eval()
     
     init_value = []
@@ -86,6 +86,7 @@ def validate(problem, model, val_dataset, tb_logger, opts, _id = None, is_swa=Fa
         
         # run the model
         s_time = time.time()
+
         bv, improve, r, _  = rollout(problem, 
                                      model, 
                                      x_input,
@@ -275,7 +276,7 @@ def train_batch(
             baseline_val.append(bl_val)
             
             # get model output
-            exchange, log_lh = model( x_input, 
+            exchange, log_lh,_ = model( x_input,
                                       solution,
                                       exchange, 
                                       do_sample = True)

@@ -243,7 +243,9 @@ class MultiHeadAttentionLayer(nn.Sequential):
             n_heads,
             embed_dim,
             feed_forward_hidden,
+            dropout,
             normalization='batch',
+
     ):
         super(MultiHeadAttentionLayer, self).__init__(
             SkipConnection(
@@ -258,9 +260,9 @@ class MultiHeadAttentionLayer(nn.Sequential):
                 nn.Sequential(
                     nn.Linear(embed_dim, feed_forward_hidden),
                     nn.ReLU(),
-                    nn.Dropout(0.001),
+                    nn.Dropout(dropout),
                     nn.Linear(feed_forward_hidden, embed_dim),
-                    nn.Dropout(0.001)
+                    nn.Dropout(dropout)
                 ) if feed_forward_hidden > 0 else nn.Linear(embed_dim, embed_dim)
             ),
             Normalization(embed_dim, normalization)

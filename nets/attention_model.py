@@ -12,6 +12,7 @@ class AttentionModel(nn.Module):
                  n_layers,
                  normalization,
                  device,
+                 dropout
                  ):
         super(AttentionModel, self).__init__()
 
@@ -41,7 +42,8 @@ class AttentionModel(nn.Module):
         self.encoder = nn.Sequential(*(
             MultiHeadAttentionLayer(self.n_heads, 
                                     self.embedding_dim, 
-                                    self.hidden_dim, 
+                                    self.hidden_dim,
+                                    dropout,
                                     self.normalization)
             for _ in range(self.n_layers))) 
             
@@ -91,4 +93,4 @@ class AttentionModel(nn.Module):
         row_selected = pair_index // gs
         pair = torch.cat((row_selected,col_selected),-1)  # pair: no_head bs, 2
         
-        return pair, selected_log_likelihood.squeeze()
+        return pair, selected_log_likelihood.squeeze(), M_value
